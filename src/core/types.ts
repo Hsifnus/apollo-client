@@ -42,6 +42,10 @@ export type InternalRefetchQueriesInclude =
   | InternalRefetchQueryDescriptor[]
   | RefetchQueriesIncludeShorthand;
 
+export type BroadcastQueryDescriptor = string | DocumentNode;
+export type BroadcastQueriesInclude = BroadcastQueryDescriptor[] | true;
+export type BroadcastQueriesIncludeOption = BroadcastQueriesInclude | false;
+
 // Used by ApolloClient["refetchQueries"]
 // TODO Improve documentation comments for this public type.
 export interface RefetchQueriesOptions<

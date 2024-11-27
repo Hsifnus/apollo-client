@@ -1134,6 +1134,7 @@ describe("ApolloClient", () => {
           friends: Friend[];
         };
       }
+
       const bestFriend = {
         id: 1,
         type: "best",
@@ -1151,8 +1152,46 @@ describe("ApolloClient", () => {
           friends: [bestFriend, badFriend],
         },
       };
-      const link = new ApolloLink(() => {
-        return Observable.of({ data });
+
+      const otherQuery = gql`
+        query otherData {
+          clubs {
+            id
+            description
+          }
+        }
+      `;
+
+      interface Club {
+        id: number;
+        description: string;
+        __typename: string;
+      }
+
+      interface OtherData {
+        clubs: Club[];
+      }
+
+      const cookingClub = {
+        id: 1,
+        description: "cooking club",
+        __typename: "Club",
+      };
+      const roboticsClub = {
+        id: 2,
+        description: "robotics club",
+        __typename: "Club",
+      };
+      const otherData = {
+        clubs: [cookingClub, roboticsClub],
+      };
+
+      const link = new ApolloLink((request) => {
+        if (request.operationName === "nestedData") {
+          return Observable.of({ data });
+        } else {
+          return Observable.of({ data: otherData });
+        }
       });
       function newClient() {
         return new ApolloClient({
@@ -1318,6 +1357,133 @@ describe("ApolloClient", () => {
             });
           }
         );
+
+        itAsync(
+          "with broadcast to specific documents (wq)",
+          (resolve, reject) => {
+            const client = newClient();
+            let count = 0;
+            const observable = client.watchQuery<Data>({ query });
+            let otherCount = 0;
+            const otherObservable = client.watchQuery<OtherData>({
+              query: otherQuery,
+            });
+
+            observable.subscribe({
+              next: (nextResult) => {
+                count++;
+                if (count === 1) {
+                  expect(nextResult.data).toEqual(data);
+
+                  client.writeQuery<OtherData>({
+                    query: otherQuery,
+                    broadcast: false,
+                    data: {
+                      clubs: [
+                        cookingClub,
+                        {
+                          ...roboticsClub,
+                          description: "computer club",
+                        },
+                      ],
+                    },
+                  });
+
+                  const readData = client.readQuery<Data>({ query });
+                  expect(readData).toEqual(data);
+
+                  // modify readData and writeQuery
+                  const friends = readData!.people.friends.slice();
+                  friends[0] = { ...friends[0], type: "okayest" };
+
+                  client.writeQuery<Data>({
+                    query,
+                    broadcast: [otherQuery],
+                    data: {
+                      people: {
+                        id: 1,
+                        friends,
+                        __typename: "Person",
+                      },
+                    },
+                  });
+
+                  setTimeout(() => {
+                    if (count === 1)
+                      reject(
+                        new Error(
+                          "writeQuery did not re-call people observable with next value"
+                        )
+                      );
+                  }, 50);
+                }
+
+                if (count === 2) {
+                  const expectation0 = {
+                    ...bestFriend,
+                    type: "okayest",
+                  };
+                  const expectation1 = badFriend;
+                  const nextFriends = nextResult.data!.people.friends;
+                  expect(nextFriends[0]).toEqual(expectation0);
+                  expect(nextFriends[1]).toEqual(expectation1);
+
+                  const readFriends = client.readQuery<Data>({ query })!.people
+                    .friends;
+                  expect(readFriends[0]).toEqual(expectation0);
+                  expect(readFriends[1]).toEqual(expectation1);
+
+                  expect(otherCount).toEqual(2);
+                  expect(
+                    client.cache.extract()[`Club${otherData.clubs[1].id}`]
+                      ?.description
+                  ).toEqual("graphql club");
+                  resolve();
+                }
+              },
+            });
+
+            otherObservable.subscribe({
+              next: (nextResult) => {
+                otherCount++;
+                if (otherCount === 1) {
+                  setTimeout(() => {
+                    if (otherCount === 1)
+                      reject(
+                        new Error(
+                          "writeQuery did not re-call clubs observable with next value"
+                        )
+                      );
+                  }, 50);
+                }
+                if (otherCount === 2) {
+                  const expectation0 = cookingClub;
+                  expect(nextResult.data.clubs[0]).toEqual(expectation0);
+                  const expectation1 = {
+                    id: 2,
+                    description: "computer club",
+                    __typename: "Club",
+                  };
+                  expect(nextResult.data.clubs[1]).toEqual(expectation1);
+
+                  client.writeQuery<OtherData>({
+                    query: otherQuery,
+                    broadcast: [query],
+                    data: {
+                      clubs: [
+                        cookingClub,
+                        {
+                          ...roboticsClub,
+                          description: "graphql club",
+                        },
+                      ],
+                    },
+                  });
+                }
+              },
+            });
+          }
+        );
       });
       describe("using writeFragment", () => {
         itAsync(
@@ -1425,6 +1591,128 @@ describe("ApolloClient", () => {
                     type: "okayest",
                   });
                   resolve();
+                }
+              },
+            });
+          }
+        );
+
+        itAsync(
+          "with broadcast to specific documents (wf)",
+          (resolve, reject) => {
+            const client = newClient();
+            let count = 0;
+            const observable = client.watchQuery<Data>({ query });
+            let otherCount = 0;
+            const otherObservable = client.watchQuery<OtherData>({
+              query: otherQuery,
+            });
+
+            observable.subscribe({
+              next: (result) => {
+                count++;
+                if (count === 1) {
+                  expect(result.data).toEqual(data);
+
+                  client.writeFragment({
+                    id: `Club${otherData.clubs[1].id}`,
+                    fragment: gql`
+                      fragment roboticsClub on Club {
+                        id
+                        description
+                      }
+                    `,
+                    broadcast: false,
+                    data: {
+                      ...roboticsClub,
+                      description: "computer club",
+                    },
+                  });
+
+                  const friends = result.data!.people.friends;
+
+                  client.writeFragment({
+                    id: `Person${result.data!.people.id}`,
+                    fragment: gql`
+                      fragment bestFriends on Person {
+                        friends {
+                          id
+                          type
+                        }
+                      }
+                    `,
+                    broadcast: [otherQuery],
+                    data: {
+                      friends: [{ ...friends[0], type: "okayest" }, friends[1]],
+                      __typename: "Person",
+                    },
+                  });
+
+                  setTimeout(() => {
+                    if (count === 1)
+                      reject(
+                        new Error(
+                          "writeFragment did not re-call people observable with next value"
+                        )
+                      );
+                  }, 50);
+                }
+
+                if (count === 2) {
+                  const nextFriends = result.data!.people.friends;
+                  expect(nextFriends[0]).toEqual({
+                    ...bestFriend,
+                    type: "okayest",
+                  });
+                  expect(nextFriends[1]).toEqual(badFriend);
+
+                  expect(otherCount).toEqual(2);
+                  expect(
+                    client.cache.extract()[`Club${otherData.clubs[1].id}`]
+                      ?.description
+                  ).toEqual("graphql club");
+                  resolve();
+                }
+              },
+            });
+
+            otherObservable.subscribe({
+              next: (nextResult) => {
+                otherCount++;
+                if (otherCount === 1) {
+                  setTimeout(() => {
+                    if (otherCount === 1)
+                      reject(
+                        new Error(
+                          "writeFragment did not re-call clubs observable with next value"
+                        )
+                      );
+                  }, 50);
+                }
+                if (otherCount === 2) {
+                  const expectation0 = cookingClub;
+                  expect(nextResult.data.clubs[0]).toEqual(expectation0);
+                  const expectation1 = {
+                    id: 2,
+                    description: "computer club",
+                    __typename: "Club",
+                  };
+                  expect(nextResult.data.clubs[1]).toEqual(expectation1);
+
+                  client.writeFragment({
+                    id: `Club${otherData.clubs[1].id}`,
+                    fragment: gql`
+                      fragment roboticsClub on Club {
+                        id
+                        description
+                      }
+                    `,
+                    broadcast: [query],
+                    data: {
+                      ...roboticsClub,
+                      description: "graphql club",
+                    },
+                  });
                 }
               },
             });

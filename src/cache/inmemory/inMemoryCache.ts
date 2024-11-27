@@ -28,13 +28,20 @@ import { EntityStore, supportsResultCaching } from "./entityStore.js";
 import { makeVar, forgetCache, recallCache } from "./reactiveVars.js";
 import { Policies } from "./policies.js";
 import { hasOwn, normalizeConfig, shouldCanonizeResults } from "./helpers.js";
-import type { OperationVariables } from "../../core/index.js";
+import type {
+  BroadcastQueriesInclude,
+  OperationVariables,
+} from "../../core/index.js";
 import { getInMemoryCacheMemoryInternals } from "../../utilities/caching/getMemoryInternals.js";
+import { QueryInfo } from "../../core/QueryInfo.js";
 
-type BroadcastOptions = Pick<
-  Cache.BatchOptions<InMemoryCache>,
-  "optimistic" | "onWatchUpdated"
->;
+interface BroadcastOptions
+  extends Pick<
+    Cache.BatchOptions<InMemoryCache>,
+    "optimistic" | "onWatchUpdated"
+  > {
+  include?: BroadcastQueriesInclude;
+}
 
 export class InMemoryCache extends ApolloCache<NormalizedCacheObject> {
   private data!: EntityStore;
@@ -213,7 +220,7 @@ export class InMemoryCache extends ApolloCache<NormalizedCacheObject> {
       return this.storeWriter.writeToStore(this.data, options);
     } finally {
       if (!--this.txCount && options.broadcast !== false) {
-        this.broadcastWatches();
+        this.broadcastWatches({ include: options.broadcast });
       }
     }
   }
@@ -244,7 +251,7 @@ export class InMemoryCache extends ApolloCache<NormalizedCacheObject> {
       return store.modify(options.id || "ROOT_QUERY", options.fields);
     } finally {
       if (!--this.txCount && options.broadcast !== false) {
-        this.broadcastWatches();
+        this.broadcastWatches({ include: options.broadcast });
       }
     }
   }
@@ -374,7 +381,7 @@ export class InMemoryCache extends ApolloCache<NormalizedCacheObject> {
       return this.optimisticData.evict(options, this.data);
     } finally {
       if (!--this.txCount && options.broadcast !== false) {
-        this.broadcastWatches();
+        this.broadcastWatches({ include: options.broadcast });
       }
     }
   }
@@ -530,7 +537,23 @@ export class InMemoryCache extends ApolloCache<NormalizedCacheObject> {
 
   protected broadcastWatches(options?: BroadcastOptions) {
     if (!this.txCount) {
-      this.watches.forEach((c) => this.maybeBroadcastWatch(c, options));
+      this.watches.forEach((c) => {
+        if (Array.isArray(options?.include)) {
+          if (c.watcher instanceof QueryInfo) {
+            const queryInfo = c.watcher;
+            if (
+              options.include.some(
+                (descriptor) =>
+                  queryInfo.observableQuery?.matchesDocument(descriptor)
+              )
+            ) {
+              this.maybeBroadcastWatch(c, options);
+            }
+          }
+        } else {
+          this.maybeBroadcastWatch(c, options);
+        }
+      });
     }
   }
 

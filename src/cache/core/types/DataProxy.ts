@@ -3,6 +3,7 @@ import type { TypedDocumentNode } from "@graphql-typed-document-node/core";
 
 import type { MissingFieldError } from "./common.js";
 import type { Reference } from "../../../utilities/index.js";
+import type { BroadcastQueriesIncludeOption } from "../../../core/types.js";
 
 export namespace DataProxy {
   export interface Query<TVariables, TData> {
@@ -97,7 +98,7 @@ export namespace DataProxy {
     /**
      * Whether to notify query watchers (default: true).
      */
-    broadcast?: boolean;
+    broadcast?: BroadcastQueriesIncludeOption;
     /**
      * When true, ignore existing field data rather than merging it with
      * incoming data (default: false).

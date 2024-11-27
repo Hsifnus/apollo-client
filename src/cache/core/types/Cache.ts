@@ -1,6 +1,7 @@
 import { DataProxy } from "./DataProxy.js";
 import type { AllFieldsModifier, Modifiers } from "./common.js";
 import type { ApolloCache } from "../cache.js";
+import type { BroadcastQueriesIncludeOption } from "../../../core/types.js";
 
 export namespace Cache {
   export type WatchCallback<TData = any> = (
@@ -50,7 +51,7 @@ export namespace Cache {
     id?: string;
     fieldName?: string;
     args?: Record<string, any>;
-    broadcast?: boolean;
+    broadcast?: BroadcastQueriesIncludeOption;
   }
 
   // Although you can call cache.reset() without options, its behavior can be
@@ -65,7 +66,7 @@ export namespace Cache {
     id?: string;
     fields: Modifiers<Entity> | AllFieldsModifier<Entity>;
     optimistic?: boolean;
-    broadcast?: boolean;
+    broadcast?: BroadcastQueriesIncludeOption;
   }
 
   export interface BatchOptions<

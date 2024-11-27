@@ -63,6 +63,7 @@ import type {
   InternalRefetchQueriesResult,
   InternalRefetchQueriesMap,
   DefaultContext,
+  BroadcastQueriesInclude,
 } from "./types.js";
 import type { LocalState } from "./LocalState.js";
 
@@ -1064,9 +1065,18 @@ export class QueryManager<TStore> {
     }
   }
 
-  public broadcastQueries() {
+  public broadcastQueries(include?: BroadcastQueriesInclude) {
     if (this.onBroadcast) this.onBroadcast();
-    this.queries.forEach((info) => info.notify());
+    if (Array.isArray(include)) {
+      const observableQueries = this.getObservableQueries(include);
+      this.queries.forEach((info) => {
+        if (observableQueries.has(info.queryId)) {
+          info.notify();
+        }
+      });
+    } else {
+      this.queries.forEach((info) => info.notify());
+    }
   }
 
   public getLocalState(): LocalState<TStore> {

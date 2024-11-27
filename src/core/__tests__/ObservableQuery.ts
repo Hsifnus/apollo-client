@@ -3157,6 +3157,71 @@ describe("ObservableQuery", () => {
     });
   });
 
+  describe("matchesDocument", () => {
+    it("reflects whether provided descriptor matches current document", () => {
+      const currentUserQuery = gql`
+        query currentUserQuery {
+          currentUser {
+            id
+          }
+        }
+      `;
+
+      const productQuery = gql`
+        query productQuery {
+          product {
+            id
+          }
+        }
+      `;
+
+      const client = new ApolloClient({
+        link: ApolloLink.empty(),
+        cache: new InMemoryCache(),
+      });
+
+      const observable = client.watchQuery({ query: currentUserQuery });
+
+      expect(observable.matchesDocument("currentUserQuery")).toBe(true);
+      expect(observable.matchesDocument(currentUserQuery)).toBe(true);
+
+      expect(observable.matchesDocument("productQuery")).toBe(false);
+      expect(observable.matchesDocument(productQuery)).toBe(false);
+
+      // this changes query, but queryName remains the same
+      observable.setOptions({ query: productQuery });
+
+      expect(observable.matchesDocument("currentUserQuery")).toBe(true);
+      expect(observable.matchesDocument(currentUserQuery)).toBe(false);
+
+      expect(observable.matchesDocument("productQuery")).toBe(false);
+      expect(observable.matchesDocument(productQuery)).toBe(true);
+    });
+
+    it("evaluates to false if fetchPolicy is standby", () => {
+      const currentUserQuery = gql`
+        query currentUserQuery {
+          currentUser {
+            id
+          }
+        }
+      `;
+
+      const client = new ApolloClient({
+        link: ApolloLink.empty(),
+        cache: new InMemoryCache(),
+      });
+
+      const observable = client.watchQuery({
+        query: currentUserQuery,
+        fetchPolicy: "standby",
+      });
+
+      expect(observable.matchesDocument("currentUserQuery")).toBe(false);
+      expect(observable.matchesDocument(currentUserQuery)).toBe(false);
+    });
+  });
+
   itAsync(
     "QueryInfo does not notify for !== but deep-equal results",
     (resolve, reject) => {

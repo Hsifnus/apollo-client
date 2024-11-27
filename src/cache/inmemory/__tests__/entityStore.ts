@@ -2724,4 +2724,6 @@ describe("EntityStore", () => {
 
     expect(cache.extract()).toEqual(snapshot);
   });
+
+  it("should notify specific watches via document array broadcast parameter", () => {});
 });

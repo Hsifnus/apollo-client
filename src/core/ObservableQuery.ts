@@ -1036,6 +1036,20 @@ Did you mean to call refetch(variables) instead of refetch({ variables })?`,
     return subscription;
   }
 
+  public matchesDocument(descriptor: string | DocumentNode) {
+    if (this.options.fetchPolicy === "standby") {
+      return false;
+    }
+
+    if (typeof descriptor === "string") {
+      return this.queryName === descriptor;
+    }
+
+    const transformedQuery =
+      this.lastQuery || this.transformDocument(this.options.query);
+    return transformedQuery === this.transformDocument(descriptor);
+  }
+
   // (Re)deliver the current result to this.observers without applying fetch
   // policies or making network requests.
   private observe() {
